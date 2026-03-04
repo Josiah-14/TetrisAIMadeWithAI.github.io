@@ -89,15 +89,21 @@
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--panel); border: 1px solid var(--accent); color: var(--accent); font-family: 'Orbitron', sans-serif; font-size: 0.7rem; letter-spacing: 0.1em; padding: 10px 20px; transition: transform 0.3s; z-index: 999; pointer-events: none; white-space: nowrap; }
   #toast.show { transform: translateX(-50%) translateY(0); }
   #toast.err { border-color: var(--accent2); color: var(--accent2); }
+  /* sync pulse */
+  .sync-flash { animation: syncpulse 0.6s ease; }
+  @keyframes syncpulse { 0%{box-shadow:0 0 0 0 rgba(0,245,255,0.6)} 100%{box-shadow:0 0 0 20px rgba(0,245,255,0)} }
 </style>
 </head>
 <body>
 <div id="app">
   <h1>TETRIS <span>AI</span></h1>
-  <p class="subtitle">NEURAL EVOLUTION TRAINER — GENETIC ALGORITHM · GLOBAL LEADERBOARD</p>
+  <p class="subtitle">COLLABORATIVE NEURAL EVOLUTION — EVERY PLAYER TRAINS THE SAME AI</p>
 
   <div class="card" style="width:100%;max-width:660px;padding:14px 24px">
-    <div class="card-title">▸ GLOBAL NETWORK — ALL PLAYERS</div>
+    <div class="card-title">
+      ▸ GLOBAL NETWORK — ALL PLAYERS
+      <span id="syncStatus" style="font-size:0.6rem;color:var(--dim)">—</span>
+    </div>
     <div class="global-bar">
       <div class="gstat"><div class="gstat-val" id="gGames">—</div><div class="gstat-label">TOTAL GAMES</div></div>
       <div class="gstat"><div class="gstat-val" id="gGens">—</div><div class="gstat-label">GENERATIONS</div></div>
@@ -117,6 +123,7 @@
         <div class="stat-row"><span>LEVEL</span><span id="level">1</span></div>
         <div class="stat-row"><span>PIECES</span><span id="pieces">0</span></div>
       </div>
+
       <div class="card">
         <div class="card-title">▸ LOCAL EVOLUTION</div>
         <div class="gen-display" id="genNum">GEN 0</div>
@@ -124,13 +131,16 @@
         <div class="stat-row hl"><span>BEST FITNESS</span><span id="bestFit">0</span></div>
         <div class="stat-row"><span>AVG FITNESS</span><span id="avgFit">0</span></div>
         <div class="stat-row"><span>AGENT</span><span id="agentNum">—</span></div>
+        <div class="stat-row"><span>GLOBAL SEEDS</span><span id="globalSeeds" style="color:var(--accent3)">0</span></div>
       </div>
+
       <div class="card">
         <div class="card-title">▸ BEST GENOME</div>
         <div id="genomeViz"><div style="color:var(--dim);font-size:0.65rem">No data yet</div></div>
         <div style="height:6px"></div>
         <div style="font-size:0.58rem;color:var(--dim);line-height:1.9">H=height · L=lines<br>O=holes · B=bumps · W=wells</div>
       </div>
+
       <div class="card">
         <div class="card-title">▸ SUBMIT TO GLOBAL</div>
         <div style="font-size:0.63rem;color:var(--dim);margin-bottom:8px">Share your best genome with everyone</div>
@@ -147,7 +157,7 @@
       </div>
     </div>
 
-    <div class="game-panel">
+    <div class="game-panel" id="gamePanel">
       <canvas id="tetris" width="300" height="600"></canvas>
     </div>
 
@@ -165,6 +175,7 @@
           <span id="statusText" style="color:var(--dim)">IDLE</span>
         </div>
       </div>
+
       <div class="card">
         <div class="card-title">▸ AI CONFIG</div>
         <div class="slider-row">
@@ -179,7 +190,15 @@
         <div style="height:6px"></div>
         <div class="slider-row">
           <div>SPEED <span class="slider-val" id="speedVal">10x</span></div>
-          <input type="range" id="speedSlider" min="1" max="50" value="10" oninput="document.getElementById('speedVal').textContent=this.value+'x';setAISpeed(this.value)">
+          <input type="range" id="speedSlider" min="1" max="500" value="10"
+            oninput="document.getElementById('speedVal').textContent=this.value+'x';setAISpeed(this.value)">
+        </div>
+        <div style="height:6px"></div>
+        <div class="slider-row">
+          <div>GLOBAL SEEDS <span class="slider-val" id="seedVal">3</span></div>
+          <input type="range" id="seedSlider" min="0" max="10" value="3"
+            oninput="document.getElementById('seedVal').textContent=this.value"
+            title="How many top global genomes to inject each generation">
         </div>
         <div style="height:10px"></div>
         <button class="btn success" id="startAIBtn" onclick="startAI()">▶ START TRAINING</button>
@@ -188,10 +207,12 @@
         <div style="height:6px"></div>
         <button class="btn" onclick="resetAI()">↺ RESET LOCAL</button>
       </div>
+
       <div class="card">
         <div class="card-title">▸ FITNESS GRAPH</div>
         <canvas id="fitnessGraph" width="176" height="100"></canvas>
       </div>
+
       <div class="card">
         <div class="card-title">▸ WEIGHT VIZ</div>
         <canvas id="neuralViz" width="176" height="80"></canvas>
@@ -204,7 +225,7 @@
     <div class="info-card" style="flex:2;min-width:300px">
       <div class="card-title">
         ▸ GLOBAL LEADERBOARD — TOP 20
-        <button onclick="loadLeaderboard()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:0.7rem;font-family:inherit;padding:0">↻ REFRESH</button>
+        <button onclick="loadLeaderboard(true)" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:0.7rem;font-family:inherit;padding:0">↻ REFRESH</button>
       </div>
       <div id="leaderboardList"><div class="lb-empty">Loading...</div></div>
     </div>
@@ -219,7 +240,7 @@
       </div>
       <div style="height:10px"></div>
       <div class="card-title">▸ HOW IT WORKS</div>
-      <p>Trains a <strong>Genetic Algorithm</strong> locally. Each agent scores board states by height, holes, lines & bumpiness. Fittest genomes reproduce with crossover + mutation. Submit your best to the <strong>shared global leaderboard</strong> — click WATCH on any entry to see it play.</p>
+      <p>Everyone trains the <strong>same AI</strong>. Each generation, the top global genomes are <strong>automatically injected</strong> into your local population — so your AI builds on the work of every other player. Submit your best score to contribute back.</p>
     </div>
   </div>
 </div>
@@ -232,49 +253,82 @@
 const BIN_ID  = '69a85d01ae596e708f5f0181';
 const API_KEY = '$2a$10$K6qQFEM3vLuUjYq9M8Zzher9N5G6BPA9tXkW49sP90nvbnhtAh6fi';
 const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-const HEADERS = {
-  'Content-Type': 'application/json',
-  'X-Master-Key': API_KEY,
-  'X-Bin-Versioning': 'false'   // always overwrite, no version history clutter
-};
+const HEADERS = { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY, 'X-Bin-Versioning': 'false' };
 
-// Rate-limit guard — JSONBin free tier is ~5 req/min writes
 let lastWrite = 0;
-const WRITE_COOLDOWN = 15000; // 15 seconds between writes
+const WRITE_COOLDOWN = 15000;
+
+// Cached global data — refresh periodically, don't block training
+let globalCache = { leaderboard: [], stats: {} };
+let cacheAge = 0;
+const CACHE_TTL = 60000; // refresh cache every 60s
 
 async function readBin() {
   const r = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
   if (!r.ok) throw new Error('Read failed: ' + r.status);
-  const j = await r.json();
-  return j.record;
+  return (await r.json()).record;
 }
-
 async function writeBin(data) {
   const now = Date.now();
-  if (now - lastWrite < WRITE_COOLDOWN) {
-    throw new Error('Please wait a moment before submitting again');
-  }
-  const r = await fetch(BIN_URL, {
-    method: 'PUT',
-    headers: HEADERS,
-    body: JSON.stringify(data)
-  });
+  if (now - lastWrite < WRITE_COOLDOWN) throw new Error('Please wait before submitting again');
+  const r = await fetch(BIN_URL, { method: 'PUT', headers: HEADERS, body: JSON.stringify(data) });
   if (!r.ok) throw new Error('Write failed: ' + r.status);
   lastWrite = Date.now();
 }
 
-// ============================================================
-// LEADERBOARD
-// ============================================================
-async function loadLeaderboard() {
+// Silently refresh cache in background
+async function refreshCache(force=false) {
+  if (!force && Date.now() - cacheAge < CACHE_TTL) return;
   try {
     const data = await readBin();
-    renderLeaderboard(data.leaderboard || []);
-    renderGlobalStats(data.stats || {});
+    globalCache = { leaderboard: data.leaderboard || [], stats: data.stats || {} };
+    cacheAge = Date.now();
+    renderLeaderboard(globalCache.leaderboard);
+    renderGlobalStats(globalCache.stats);
+    setSyncStatus('SYNCED ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
   } catch(e) {
-    document.getElementById('leaderboardList').innerHTML =
-      '<div class="lb-empty" style="color:var(--accent2)">Could not load — check connection</div>';
+    setSyncStatus('OFFLINE');
   }
+}
+
+function setSyncStatus(msg) {
+  document.getElementById('syncStatus').textContent = msg;
+}
+
+// ============================================================
+// GLOBAL SEED INJECTION
+// Every N generations, pull top global genomes into local pop
+// ============================================================
+let globalSeededCount = 0;
+
+function injectGlobalSeeds() {
+  const seedCount = parseInt(document.getElementById('seedSlider').value);
+  if (seedCount === 0) return;
+  const top = globalCache.leaderboard.slice(0, seedCount);
+  if (!top.length) return;
+
+  // Replace worst local agents with global top genomes (mutated slightly so they can adapt)
+  const mutRate = 0.1; // small mutation when seeding so they're not exact clones
+  const sorted = agentFitness.map((f,i)=>({f,i})).sort((a,b)=>a.f-b.f);
+  top.forEach((entry, i) => {
+    if (!entry.weights || entry.weights.length !== 5) return;
+    const targetIdx = sorted[i] ? sorted[i].i : i;
+    // Slightly mutate the global genome before injecting
+    population[targetIdx] = entry.weights.map(g =>
+      Math.random() < mutRate ? g + (Math.random()-0.5)*0.3 : g
+    );
+  });
+
+  globalSeededCount += top.length;
+  document.getElementById('globalSeeds').textContent = globalSeededCount;
+  setSyncStatus('INJECTED ' + top.length + ' GLOBAL SEEDS');
+}
+
+// ============================================================
+// LEADERBOARD UI
+// ============================================================
+async function loadLeaderboard(force=false) {
+  await refreshCache(force);
 }
 
 async function submitToGlobal() {
@@ -290,45 +344,38 @@ async function submitToGlobal() {
     let entries = data.leaderboard || [];
     let stats   = data.stats || { totalGames:0, totalGens:0, bestFit:0, players:0 };
 
-    // Remove same name if new score is better
     entries = entries.filter(e => !(e.name === name && e.fitness <= Math.round(fitness)));
-
     entries.push({
-      name,
-      fitness:    Math.round(fitness),
-      weights:    bestWeights,
-      generation,
-      date:       new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}),
-      ts:         Date.now()
+      name, fitness: Math.round(fitness), weights: bestWeights, generation,
+      date: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}),
+      ts: Date.now()
     });
-    entries.sort((a, b) => b.fitness - a.fitness);
+    entries.sort((a,b) => b.fitness - a.fitness);
     entries = entries.slice(0, 20);
 
-    stats.totalGames = (stats.totalGames || 0) + currentAgent + generation * (population.length || 1);
-    stats.totalGens  = (stats.totalGens  || 0) + generation;
-    stats.bestFit    = Math.max(stats.bestFit || 0, Math.round(fitness));
-    stats.players    = new Set(entries.map(e => e.name)).size;
+    stats.totalGames = (stats.totalGames||0) + currentAgent + generation*(population.length||1);
+    stats.totalGens  = (stats.totalGens||0) + generation;
+    stats.bestFit    = Math.max(stats.bestFit||0, Math.round(fitness));
+    stats.players    = new Set(entries.map(e=>e.name)).size;
 
     await writeBin({ leaderboard: entries, stats });
+
+    globalCache = { leaderboard: entries, stats };
+    cacheAge = Date.now();
     renderLeaderboard(entries);
     renderGlobalStats(stats);
+    setSyncStatus('SUBMITTED ✓');
     toast('SUBMITTED! ' + name + ' → ' + Math.round(fitness).toLocaleString());
-  } catch(e) {
-    toast(e.message || 'Submit failed', true);
-  }
+  } catch(e) { toast(e.message||'Submit failed', true); }
 }
 
 function renderLeaderboard(entries) {
   const el = document.getElementById('leaderboardList');
-  if (!entries || !entries.length) {
-    el.innerHTML = '<div class="lb-empty">No entries yet — be the first to submit!</div>';
-    return;
-  }
-  const rc  = ['gold','silver','bronze'];
-  const sym = ['◆','◈','◇'];
-  el.innerHTML = entries.map((e, i) => {
+  if (!entries||!entries.length) { el.innerHTML='<div class="lb-empty">No entries yet — be the first!</div>'; return; }
+  const rc=['gold','silver','bronze'], sym=['◆','◈','◇'];
+  el.innerHTML = entries.map((e,i) => {
     const sw = JSON.stringify(e.weights);
-    const sn = String(e.name).replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const sn = String(e.name).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     return `<div class="lb-row">
       <div class="lb-rank ${rc[i]||''}">${i<3?sym[i]:i+1}</div>
       <div class="lb-name">${sn}</div>
@@ -355,46 +402,43 @@ function watchEntry(weights, name) {
 
 function exportGenome() {
   if (!bestWeights) { toast('No genome to export!', true); return; }
-  const data = { weights: bestWeights, fitness: Math.max(...agentFitness.filter(f=>f>0), 0), generation, fitnessHistory, exported: new Date().toISOString() };
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)], {type:'application/json'}));
-  a.download = 'tetris-genome-gen' + generation + '.json';
-  a.click();
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({weights:bestWeights,fitness:Math.max(...agentFitness.filter(f=>f>0),0),generation,fitnessHistory,exported:new Date().toISOString()},null,2)],{type:'application/json'}));
+  a.download='tetris-genome-gen'+generation+'.json'; a.click();
   toast('GENOME EXPORTED');
 }
 
 function importGenome(ev) {
-  const file = ev.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
+  const file=ev.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
     try {
-      const d = JSON.parse(e.target.result);
-      if (!d.weights || d.weights.length !== 5) throw new Error('Invalid genome file');
-      bestWeights = d.weights;
-      if (d.fitnessHistory) fitnessHistory = d.fitnessHistory;
-      if (d.generation) generation = d.generation;
-      if (!population.length) initPopulation();
-      population[0] = [...bestWeights];
+      const d=JSON.parse(e.target.result);
+      if(!d.weights||d.weights.length!==5) throw new Error('Invalid genome');
+      bestWeights=d.weights;
+      if(d.fitnessHistory) fitnessHistory=d.fitnessHistory;
+      if(d.generation) generation=d.generation;
+      if(!population.length) initPopulation();
+      population[0]=[...bestWeights];
       updateEvolutionStats(); drawFitnessGraph();
-      toast('IMPORTED — Gen ' + generation);
-    } catch(err) { toast('Import failed: ' + err.message, true); }
+      toast('IMPORTED — Gen '+generation);
+    } catch(err){toast('Import failed: '+err.message,true);}
   };
-  reader.readAsText(file);
-  ev.target.value = '';
+  reader.readAsText(file); ev.target.value='';
 }
 
-function toast(msg, err=false) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
-  clearTimeout(t._t); t._t = setTimeout(() => t.className='', 3200);
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show'+(err?' err':'');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className='',3200);
 }
 
 // ============================================================
 // TETRIS CORE
 // ============================================================
-const COLS=10, ROWS=20, BLOCK=30;
-const canvas=document.getElementById('tetris'), ctx=canvas.getContext('2d');
-const ncanvas=document.getElementById('nextPiece'), nctx=ncanvas.getContext('2d');
+const COLS=10,ROWS=20,BLOCK=30;
+const canvas=document.getElementById('tetris'),ctx=canvas.getContext('2d');
+const ncanvas=document.getElementById('nextPiece'),nctx=ncanvas.getContext('2d');
 const PIECES=[
   {shape:[[1,1,1,1]],color:'#00f5ff'},
   {shape:[[1,1],[1,1]],color:'#ffe600'},
@@ -414,7 +458,11 @@ function valid(sh,px,py){for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;
 function lockPiece(){for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[r].length;c++){if(!piece.shape[r][c])continue;if(piece.y+r<0){gameOver=true;return;}board[piece.y+r][piece.x+c]=piece.color;}pieces++;clearLines();piece=nextPiece;nextPiece=randPiece();if(!valid(piece.shape,piece.x,piece.y))gameOver=true;}
 function clearLines(){let cl=0;for(let r=ROWS-1;r>=0;r--)if(board[r].every(c=>c!==0)){board.splice(r,1);board.unshift(new Array(COLS).fill(0));cl++;r++;}if(cl){lines+=cl;const pts=[0,100,300,500,800];score+=(pts[cl]||800)*level;level=Math.floor(lines/10)+1;dropInterval=Math.max(80,800-(level-1)*70);updateStats();}}
 function drawBl(c,x,y,sz,cx,ghost){cx.fillStyle=ghost?'rgba(255,255,255,0.07)':c;cx.fillRect(x*sz+1,y*sz+1,sz-2,sz-2);if(!ghost){cx.fillStyle='rgba(255,255,255,0.22)';cx.fillRect(x*sz+2,y*sz+2,sz-4,4);cx.fillStyle='rgba(0,0,0,0.28)';cx.fillRect(x*sz+2,y*sz+sz-6,sz-4,4);}}
+
+// At high speeds, skip canvas rendering to go faster
+let skipRender = false;
 function drawBoard(){
+  if(skipRender) return;
   ctx.fillStyle='#050810';ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=1;
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)ctx.strokeRect(c*BLOCK,r*BLOCK,BLOCK,BLOCK);
@@ -426,7 +474,7 @@ function drawBoard(){
   }
   if(gameOver){ctx.fillStyle='rgba(5,8,16,0.85)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#ff006e';ctx.font='bold 28px Orbitron,monospace';ctx.textAlign='center';ctx.fillText('GAME OVER',canvas.width/2,canvas.height/2-20);ctx.fillStyle='#c8d8f0';ctx.font='14px Share Tech Mono,monospace';ctx.fillText('Score: '+score,canvas.width/2,canvas.height/2+15);if(currentMode==='human'){ctx.fillStyle='#00f5ff';ctx.font='11px Share Tech Mono,monospace';ctx.fillText('Press SPACE to restart',canvas.width/2,canvas.height/2+42);}ctx.textAlign='left';}
 }
-function drawNext(){nctx.fillStyle='#0a0f1e';nctx.fillRect(0,0,80,80);if(!nextPiece)return;const bs=16,ox=Math.floor((4-nextPiece.shape[0].length)/2),oy=Math.floor((4-nextPiece.shape.length)/2);for(let r=0;r<nextPiece.shape.length;r++)for(let c=0;c<nextPiece.shape[r].length;c++)if(nextPiece.shape[r][c])drawBl(nextPiece.color,ox+c,oy+r,bs,nctx);}
+function drawNext(){nctx.fillStyle='#0a0f1e';nctx.fillRect(0,0,80,80);if(!nextPiece||skipRender)return;const bs=16,ox=Math.floor((4-nextPiece.shape[0].length)/2),oy=Math.floor((4-nextPiece.shape.length)/2);for(let r=0;r<nextPiece.shape.length;r++)for(let c=0;c<nextPiece.shape[r].length;c++)if(nextPiece.shape[r][c])drawBl(nextPiece.color,ox+c,oy+r,bs,nctx);}
 function updateStats(){document.getElementById('score').textContent=score;document.getElementById('lines').textContent=lines;document.getElementById('level').textContent=level;document.getElementById('pieces').textContent=pieces;}
 
 // ============================================================
@@ -487,21 +535,45 @@ function bestMove(b,p,w){
 // ============================================================
 let population=[],generation=0,currentAgent=0,agentFitness=[],fitnessHistory=[],bestWeights=null;
 let aiRunning=false,aiIntervalId=null,aiSpeedMultiplier=10;
+
 function randGenome(){return[-(Math.random()*2),Math.random()*2,-(Math.random()*2),-(Math.random()*1),-(Math.random()*1)];}
-function initPopulation(){const sz=parseInt(document.getElementById('popSlider').value);population=Array.from({length:sz},randGenome);agentFitness=new Array(sz).fill(0);generation=0;currentAgent=0;fitnessHistory=[];updateEvolutionStats();}
+
+function initPopulation(){
+  const sz=parseInt(document.getElementById('popSlider').value);
+  population=Array.from({length:sz},randGenome);
+  // Seed with any global genomes we already have cached
+  const top=globalCache.leaderboard.slice(0,3);
+  top.forEach((e,i)=>{ if(e.weights&&e.weights.length===5) population[i]=[...e.weights]; });
+  agentFitness=new Array(sz).fill(0);
+  generation=0;currentAgent=0;fitnessHistory=[];
+  updateEvolutionStats();
+}
+
 function nextGeneration(){
   const best=Math.max(...agentFitness),avg=agentFitness.reduce((a,b)=>a+b,0)/agentFitness.length;
   fitnessHistory.push({best,avg});if(fitnessHistory.length>100)fitnessHistory.shift();
   bestWeights=[...population[agentFitness.indexOf(best)]];
+
   const sorted=agentFitness.map((f,i)=>({f,i})).sort((a,b)=>b.f-a.f);
   const topN=Math.max(2,Math.floor(population.length*0.2));
   const parents=sorted.slice(0,topN).map(x=>population[x.i]);
   const mutRate=parseFloat(document.getElementById('mutSlider').value)/100;
   const newPop=[bestWeights];
-  while(newPop.length<population.length){const p1=parents[Math.floor(Math.random()*parents.length)],p2=parents[Math.floor(Math.random()*parents.length)];newPop.push(p1.map((g,i)=>Math.random()<0.5?g:p2[i]).map(g=>Math.random()<mutRate?g+(Math.random()-0.5)*0.5:g));}
+  while(newPop.length<population.length){
+    const p1=parents[Math.floor(Math.random()*parents.length)],p2=parents[Math.floor(Math.random()*parents.length)];
+    newPop.push(p1.map((g,i)=>Math.random()<0.5?g:p2[i]).map(g=>Math.random()<mutRate?g+(Math.random()-0.5)*0.5:g));
+  }
   population=newPop;agentFitness=new Array(population.length).fill(0);generation++;currentAgent=0;
+
+  // Inject global seeds every generation (non-blocking, uses cached data)
+  injectGlobalSeeds();
+
+  // Trigger a background cache refresh every 5 generations
+  if(generation%5===0) refreshCache();
+
   drawFitnessGraph();updateEvolutionStats();
 }
+
 function updateEvolutionStats(){
   document.getElementById('genNum').textContent='GEN '+generation;
   document.getElementById('popSize').textContent=population.length||'—';
@@ -514,41 +586,165 @@ function updateEvolutionStats(){
 
 // ============================================================
 // AI GAME RUNNER
+// High-speed mode: at >100x we run multiple full games per tick
+// instead of animating individual moves
 // ============================================================
 let aiBoard,aiPiece,aiNext,aiScore,aiLines,aiPieces,aiQueue=[];
-function initAIGame(){aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiScore=0;aiLines=0;aiPieces=0;score=0;lines=0;level=1;pieces=0;board=aiBoard;piece=aiPiece;nextPiece=aiNext;aiQueue=[];computeMove();}
-function computeMove(){const w=population[currentAgent];if(!w)return;const bm=bestMove(aiBoard,aiPiece,w);if(!bm)return;aiQueue=[];for(let i=0;i<bm.rotation;i++)aiQueue.push('r');const dx=bm.x-aiPiece.x;for(let i=0;i<Math.abs(dx);i++)aiQueue.push(dx>0?'R':'L');aiQueue.push('D');}
-function aiStep(){
-  if(!aiRunning)return;
-  if(aiQueue.length>0){
-    const mv=aiQueue.shift();
-    if(mv==='r'){const rot=rotate(aiPiece.shape);if(valid(rot,aiPiece.x,aiPiece.y))aiPiece.shape=rot;}
-    else if(mv==='L'){if(valid(aiPiece.shape,aiPiece.x-1,aiPiece.y))aiPiece.x--;}
-    else if(mv==='R'){if(valid(aiPiece.shape,aiPiece.x+1,aiPiece.y))aiPiece.x++;}
-    else if(mv==='D'){
-      while(valid(aiPiece.shape,aiPiece.x,aiPiece.y+1))aiPiece.y++;
-      for(let r=0;r<aiPiece.shape.length;r++)for(let c=0;c<aiPiece.shape[r].length;c++){if(!aiPiece.shape[r][c])continue;if(aiPiece.y+r<0){endAIGame();return;}aiBoard[aiPiece.y+r][aiPiece.x+c]=aiPiece.color;}
-      let cl=0;for(let r=ROWS-1;r>=0;r--)if(aiBoard[r].every(c=>c!==0)){aiBoard.splice(r,1);aiBoard.unshift(new Array(COLS).fill(0));cl++;r++;}
-      aiLines+=cl;aiPieces++;const pts=[0,100,300,500,800];aiScore+=(pts[cl]||800)*Math.max(1,Math.floor(aiLines/10)+1);
-      level=Math.floor(aiLines/10)+1;score=aiScore;lines=aiLines;pieces=aiPieces;
-      if(aiPieces>=500){endAIGame();return;}
-      aiPiece=aiNext;aiNext=randPiece();board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
-      if(!valid(aiPiece.shape,aiPiece.x,aiPiece.y)){endAIGame();return;}
-      computeMove();
-    }
-  }
-  board=aiBoard;piece=aiPiece;nextPiece=aiNext;drawBoard();drawNext();
-  document.getElementById('statusDot').className='status-dot thinking';
+
+function initAIGame(){
+  aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();
+  aiScore=0;aiLines=0;aiPieces=0;score=0;lines=0;level=1;pieces=0;
+  board=aiBoard;piece=aiPiece;nextPiece=aiNext;aiQueue=[];computeMove();
 }
-function endAIGame(){agentFitness[currentAgent]=aiLines*100+aiPieces*0.5+aiScore*0.01;currentAgent++;if(currentAgent>=population.length)nextGeneration();else updateEvolutionStats();initAIGame();}
+
+function computeMove(){
+  const w=population[currentAgent];if(!w)return;
+  const bm=bestMove(aiBoard,aiPiece,w);if(!bm)return;
+  aiQueue=[];
+  for(let i=0;i<bm.rotation;i++)aiQueue.push('r');
+  const dx=bm.x-aiPiece.x;
+  for(let i=0;i<Math.abs(dx);i++)aiQueue.push(dx>0?'R':'L');
+  aiQueue.push('D');
+}
+
+// Execute one full piece placement (skip animation, just drop instantly)
+// Returns true if game over
+function placePieceInstant(){
+  const w=population[currentAgent]; if(!w) return true;
+  const bm=bestMove(aiBoard,aiPiece,w); if(!bm) return true;
+
+  // Apply rotation
+  for(let i=0;i<bm.rotation;i++){
+    const rot=rotate(aiPiece.shape);
+    if(valid(rot,aiPiece.x,aiPiece.y)) aiPiece.shape=rot;
+  }
+  // Move x
+  aiPiece.x=bm.x;
+  // Drop
+  while(valid(aiPiece.shape,aiPiece.x,aiPiece.y+1)) aiPiece.y++;
+  // Lock
+  for(let r=0;r<aiPiece.shape.length;r++)for(let c=0;c<aiPiece.shape[r].length;c++){
+    if(!aiPiece.shape[r][c])continue;
+    if(aiPiece.y+r<0) return true;
+    aiBoard[aiPiece.y+r][aiPiece.x+c]=aiPiece.color;
+  }
+  // Clear lines
+  let cl=0;
+  for(let r=ROWS-1;r>=0;r--)if(aiBoard[r].every(c=>c!==0)){aiBoard.splice(r,1);aiBoard.unshift(new Array(COLS).fill(0));cl++;r++;}
+  aiLines+=cl; aiPieces++;
+  const pts=[0,100,300,500,800];
+  aiScore+=(pts[cl]||800)*Math.max(1,Math.floor(aiLines/10)+1);
+  level=Math.floor(aiLines/10)+1; score=aiScore; lines=aiLines; pieces=aiPieces;
+
+  if(aiPieces>=500) return true;
+
+  aiPiece=aiNext; aiNext=randPiece();
+  if(!valid(aiPiece.shape,aiPiece.x,aiPiece.y)) return true;
+  return false;
+}
+
+function aiStep(){
+  if(!aiRunning) return;
+
+  if(aiSpeedMultiplier>=100){
+    // TURBO MODE: run many full piece placements per tick, no animation
+    skipRender=true;
+    const piecesPerTick=Math.floor(aiSpeedMultiplier/10);
+    for(let i=0;i<piecesPerTick;i++){
+      const done=placePieceInstant();
+      if(done){
+        agentFitness[currentAgent]=aiLines*100+aiPieces*0.5+aiScore*0.01;
+        currentAgent++;
+        if(currentAgent>=population.length) nextGeneration(); else updateEvolutionStats();
+        initAIGame();
+        break;
+      }
+    }
+    // Still render periodically so screen isn't blank
+    board=aiBoard; piece=aiPiece; nextPiece=aiNext;
+    skipRender=false;
+    drawBoard(); drawNext();
+    updateStats();
+    document.getElementById('statusDot').className='status-dot thinking';
+  } else {
+    // NORMAL MODE: animated step-by-step
+    skipRender=false;
+    if(aiQueue.length>0){
+      const mv=aiQueue.shift();
+      if(mv==='r'){const rot=rotate(aiPiece.shape);if(valid(rot,aiPiece.x,aiPiece.y))aiPiece.shape=rot;}
+      else if(mv==='L'){if(valid(aiPiece.shape,aiPiece.x-1,aiPiece.y))aiPiece.x--;}
+      else if(mv==='R'){if(valid(aiPiece.shape,aiPiece.x+1,aiPiece.y))aiPiece.x++;}
+      else if(mv==='D'){
+        while(valid(aiPiece.shape,aiPiece.x,aiPiece.y+1))aiPiece.y++;
+        for(let r=0;r<aiPiece.shape.length;r++)for(let c=0;c<aiPiece.shape[r].length;c++){
+          if(!aiPiece.shape[r][c])continue;
+          if(aiPiece.y+r<0){endAIGame();return;}
+          aiBoard[aiPiece.y+r][aiPiece.x+c]=aiPiece.color;
+        }
+        let cl=0;for(let r=ROWS-1;r>=0;r--)if(aiBoard[r].every(c=>c!==0)){aiBoard.splice(r,1);aiBoard.unshift(new Array(COLS).fill(0));cl++;r++;}
+        aiLines+=cl;aiPieces++;const pts=[0,100,300,500,800];aiScore+=(pts[cl]||800)*Math.max(1,Math.floor(aiLines/10)+1);
+        level=Math.floor(aiLines/10)+1;score=aiScore;lines=aiLines;pieces=aiPieces;
+        if(aiPieces>=500){endAIGame();return;}
+        aiPiece=aiNext;aiNext=randPiece();board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+        if(!valid(aiPiece.shape,aiPiece.x,aiPiece.y)){endAIGame();return;}
+        computeMove();
+      }
+    }
+    board=aiBoard;piece=aiPiece;nextPiece=aiNext;drawBoard();drawNext();
+    document.getElementById('statusDot').className='status-dot thinking';
+  }
+}
+
+function endAIGame(){
+  agentFitness[currentAgent]=aiLines*100+aiPieces*0.5+aiScore*0.01;
+  currentAgent++;
+  if(currentAgent>=population.length) nextGeneration(); else updateEvolutionStats();
+  initAIGame();
+}
 
 // ============================================================
 // AI CONTROL
 // ============================================================
-function startAI(){if(!population.length)initPopulation();aiRunning=true;currentMode='ai';cancelAnimationFrame(animFrame);initAIGame();aiIntervalId=setInterval(aiStep,Math.max(5,Math.round(100/aiSpeedMultiplier)));document.getElementById('startAIBtn').disabled=true;document.getElementById('stopAIBtn').disabled=false;document.getElementById('statusDot').className='status-dot on';document.getElementById('statusText').textContent='TRAINING...';updateEvolutionStats();}
-function stopAI(){aiRunning=false;clearInterval(aiIntervalId);document.getElementById('startAIBtn').disabled=false;document.getElementById('stopAIBtn').disabled=true;document.getElementById('statusDot').className='status-dot';document.getElementById('statusText').textContent='PAUSED';}
-function resetAI(){stopAI();population=[];agentFitness=[];fitnessHistory=[];generation=0;currentAgent=0;bestWeights=null;updateEvolutionStats();drawFitnessGraph();drawNeuralViz();['genNum','bestFit','avgFit'].forEach(id=>document.getElementById(id).textContent=id==='genNum'?'GEN 0':'0');document.getElementById('popSize').textContent='—';document.getElementById('agentNum').textContent='—';document.getElementById('statusText').textContent='IDLE';document.getElementById('genomeViz').innerHTML='<div style="color:var(--dim);font-size:0.65rem">No data yet</div>';}
-function setAISpeed(v){aiSpeedMultiplier=parseInt(v);if(aiRunning){clearInterval(aiIntervalId);aiIntervalId=setInterval(aiStep,Math.max(5,Math.round(100/aiSpeedMultiplier)));}}
+function startAI(){
+  if(!population.length) initPopulation();
+  aiRunning=true; currentMode='ai';
+  cancelAnimationFrame(animFrame); initAIGame();
+  // At very high speeds use a faster interval; browser min is ~4ms
+  const iv=aiSpeedMultiplier>=100?4:Math.max(4,Math.round(100/aiSpeedMultiplier));
+  aiIntervalId=setInterval(aiStep,iv);
+  document.getElementById('startAIBtn').disabled=true;
+  document.getElementById('stopAIBtn').disabled=false;
+  document.getElementById('statusDot').className='status-dot on';
+  document.getElementById('statusText').textContent='TRAINING...';
+  updateEvolutionStats();
+}
+function stopAI(){
+  aiRunning=false; skipRender=false; clearInterval(aiIntervalId);
+  document.getElementById('startAIBtn').disabled=false;
+  document.getElementById('stopAIBtn').disabled=true;
+  document.getElementById('statusDot').className='status-dot';
+  document.getElementById('statusText').textContent='PAUSED';
+  drawBoard(); drawNext();
+}
+function resetAI(){
+  stopAI(); population=[];agentFitness=[];fitnessHistory=[];
+  generation=0;currentAgent=0;bestWeights=null;globalSeededCount=0;
+  updateEvolutionStats();drawFitnessGraph();drawNeuralViz();
+  ['genNum','bestFit','avgFit'].forEach(id=>document.getElementById(id).textContent=id==='genNum'?'GEN 0':'0');
+  document.getElementById('popSize').textContent='—';
+  document.getElementById('agentNum').textContent='—';
+  document.getElementById('globalSeeds').textContent='0';
+  document.getElementById('statusText').textContent='IDLE';
+  document.getElementById('genomeViz').innerHTML='<div style="color:var(--dim);font-size:0.65rem">No data yet</div>';
+}
+function setAISpeed(v){
+  aiSpeedMultiplier=parseInt(v);
+  if(aiRunning){
+    clearInterval(aiIntervalId);
+    const iv=aiSpeedMultiplier>=100?4:Math.max(4,Math.round(100/aiSpeedMultiplier));
+    aiIntervalId=setInterval(aiStep,iv);
+  }
+}
 
 // ============================================================
 // WATCH MODE
@@ -556,13 +752,50 @@ function setAISpeed(v){aiSpeedMultiplier=parseInt(v);if(aiRunning){clearInterval
 let watchId=null;
 function startWatch(){
   if(!bestWeights){toast('Train first — no best genome yet!',true);['modeHuman','modeAI','modeWatch'].forEach(id=>document.getElementById(id).classList.remove('active'));document.getElementById('modeHuman').classList.add('active');currentMode='human';return;}
-  clearInterval(watchId);clearInterval(aiIntervalId);aiRunning=false;currentMode='watch';cancelAnimationFrame(animFrame);
-  aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiPieces=0;aiLines=0;aiScore=0;score=0;lines=0;level=1;pieces=0;
+  clearInterval(watchId);clearInterval(aiIntervalId);aiRunning=false;skipRender=false;
+  currentMode='watch';cancelAnimationFrame(animFrame);
+  aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();
+  aiPieces=0;aiLines=0;aiScore=0;score=0;lines=0;level=1;pieces=0;
   board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
   if(!population.length)population=[bestWeights];else population[0]=bestWeights;
   currentAgent=0;aiQueue=[];computeMove();
-  document.getElementById('statusDot').className='status-dot on';document.getElementById('statusText').textContent='WATCHING BEST';
-  watchId=setInterval(()=>{if(currentMode!=='watch')return;aiStep();},80);
+  document.getElementById('statusDot').className='status-dot on';
+  document.getElementById('statusText').textContent='WATCHING BEST';
+  watchId=setInterval(()=>{if(currentMode!=='watch')return;
+    // Watch always uses animated mode
+    const savedSpeed=aiSpeedMultiplier; aiSpeedMultiplier=10;
+    skipRender=false;
+    if(aiQueue.length>0){
+      const mv=aiQueue.shift();
+      if(mv==='r'){const rot=rotate(aiPiece.shape);if(valid(rot,aiPiece.x,aiPiece.y))aiPiece.shape=rot;}
+      else if(mv==='L'){if(valid(aiPiece.shape,aiPiece.x-1,aiPiece.y))aiPiece.x--;}
+      else if(mv==='R'){if(valid(aiPiece.shape,aiPiece.x+1,aiPiece.y))aiPiece.x++;}
+      else if(mv==='D'){
+        while(valid(aiPiece.shape,aiPiece.x,aiPiece.y+1))aiPiece.y++;
+        for(let r2=0;r2<aiPiece.shape.length;r2++)for(let c=0;c<aiPiece.shape[r2].length;c++){
+          if(!aiPiece.shape[r2][c])continue;
+          if(aiPiece.y+r2<0){
+            aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiPieces=0;aiLines=0;aiScore=0;score=0;lines=0;level=1;pieces=0;
+            board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+            population[0]=bestWeights;currentAgent=0;aiQueue=[];computeMove();return;
+          }
+          aiBoard[aiPiece.y+r2][aiPiece.x+c]=aiPiece.color;
+        }
+        let cl=0;for(let r2=ROWS-1;r2>=0;r2--)if(aiBoard[r2].every(c=>c!==0)){aiBoard.splice(r2,1);aiBoard.unshift(new Array(COLS).fill(0));cl++;r2++;}
+        aiLines+=cl;aiPieces++;const pts=[0,100,300,500,800];aiScore+=(pts[cl]||800)*Math.max(1,Math.floor(aiLines/10)+1);
+        level=Math.floor(aiLines/10)+1;score=aiScore;lines=aiLines;pieces=aiPieces;
+        aiPiece=aiNext;aiNext=randPiece();board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+        if(!valid(aiPiece.shape,aiPiece.x,aiPiece.y)){
+          aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiPieces=0;aiLines=0;aiScore=0;score=0;lines=0;level=1;pieces=0;
+          board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+          population[0]=bestWeights;currentAgent=0;aiQueue=[];computeMove();return;
+        }
+        computeMove();
+      }
+    }
+    board=aiBoard;piece=aiPiece;nextPiece=aiNext;drawBoard();drawNext();
+    aiSpeedMultiplier=savedSpeed;
+  },80);
 }
 
 // ============================================================
@@ -610,8 +843,8 @@ setInterval(()=>{if(aiRunning||currentMode==='watch'){drawNeuralViz();if(Math.ra
 resetGame();
 animFrame=requestAnimationFrame(humanLoop);
 drawFitnessGraph();drawNeuralViz();drawGenomeViz();
-loadLeaderboard();
-setInterval(loadLeaderboard, 60000);
+loadLeaderboard(true);
+setInterval(()=>refreshCache(),60000);
 </script>
 </body>
 </html>
