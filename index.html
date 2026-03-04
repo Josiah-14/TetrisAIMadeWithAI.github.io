@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TETRIS — AI TRAINER</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+  :root {
+    --bg: #050810; --panel: #0a0f1e; --border: #1a2a4a;
+    --accent: #00f5ff; --accent2: #ff006e; --accent3: #aaff00;
+    --text: #c8d8f0; --dim: #3a4a6a;
+    --glow: 0 0 10px var(--accent), 0 0 30px rgba(0,245,255,0.3);
+    --glow2: 0 0 10px var(--accent2), 0 0 30px rgba(255,0,110,0.3);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Share Tech Mono', monospace; min-height: 100vh; overflow-x: hidden;
+    background-image: radial-gradient(ellipse at 20% 50%, rgba(0,245,255,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 50%, rgba(255,0,110,0.04) 0%, transparent 60%);
+  }
+  #app { display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 16px; }
+  h1 { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 2rem; letter-spacing: 0.3em; color: var(--accent); text-shadow: var(--glow); text-align: center; }
+  h1 span { color: var(--accent2); text-shadow: var(--glow2); }
+  .subtitle { font-size: 0.7rem; letter-spacing: 0.2em; color: var(--dim); text-align: center; margin-top: -10px; }
+  .main-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  .game-panel { border: 1px solid var(--border); background: var(--panel); padding: 12px; box-shadow: 0 0 40px rgba(0,245,255,0.05); }
+  canvas#tetris { display: block; border: 1px solid var(--dim); box-shadow: 0 0 20px rgba(0,245,255,0.1); }
+  .side-panel { display: flex; flex-direction: column; gap: 12px; width: 200px; }
+  .card { background: var(--panel); border: 1px solid var(--border); padding: 12px; }
+  .card-title { font-family: 'Orbitron', sans-serif; font-size: 0.6rem; letter-spacing: 0.2em; color: var(--accent); margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 4px; color: var(--dim); }
+  .stat-row span:last-child { color: var(--text); font-weight: bold; }
+  .stat-row.hl span:last-child { color: var(--accent); text-shadow: var(--glow); }
+  canvas#nextPiece { display: block; margin: 0 auto; border: 1px solid var(--border); }
+  .ai-panel { width: 200px; display: flex; flex-direction: column; gap: 12px; }
+  .btn { width: 100%; padding: 10px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-family: 'Orbitron', sans-serif; font-size: 0.65rem; letter-spacing: 0.15em; cursor: pointer; transition: all 0.2s; }
+  .btn:hover { background: rgba(0,245,255,0.1); box-shadow: var(--glow); }
+  .btn.danger { border-color: var(--accent2); color: var(--accent2); }
+  .btn.danger:hover { background: rgba(255,0,110,0.1); }
+  .btn.success { border-color: var(--accent3); color: var(--accent3); }
+  .btn.success:hover { background: rgba(170,255,0,0.1); }
+  .btn.gold { border-color: #ffd700; color: #ffd700; }
+  .btn.gold:hover { background: rgba(255,215,0,0.1); box-shadow: 0 0 10px #ffd700; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .slider-row { display: flex; flex-direction: column; gap: 4px; font-size: 0.7rem; color: var(--dim); }
+  .slider-row input[type=range] { width: 100%; accent-color: var(--accent); }
+  .slider-val { color: var(--accent); }
+  canvas#neuralViz, canvas#fitnessGraph { display: block; width: 100%; border: 1px solid var(--border); }
+  .mode-toggle { display: flex; border: 1px solid var(--border); }
+  .mode-btn { flex: 1; padding: 8px 4px; border: none; background: transparent; color: var(--dim); font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; cursor: pointer; transition: all 0.2s; }
+  .mode-btn.active { background: rgba(0,245,255,0.15); color: var(--accent); }
+  .ai-status { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); transition: all 0.3s; }
+  .status-dot.on { background: var(--accent3); box-shadow: 0 0 8px var(--accent3); animation: pulse 1s infinite; }
+  .status-dot.thinking { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 0.3s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+  .gen-display { font-family: 'Orbitron', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--accent); text-shadow: var(--glow); text-align: center; margin: 4px 0; }
+  .bottom-row { display: flex; gap: 16px; width: 100%; max-width: 900px; flex-wrap: wrap; }
+  .info-card { flex: 1; background: var(--panel); border: 1px solid var(--border); padding: 10px 14px; font-size: 0.68rem; min-width: 200px; }
+  .info-card p { color: var(--dim); line-height: 1.6; }
+  .info-card p strong { color: var(--accent); }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .key { padding: 2px 8px; border: 1px solid var(--border); font-size: 0.65rem; color: var(--text); background: rgba(255,255,255,0.03); }
+  .global-bar { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .gstat { text-align: center; }
+  .gstat-val { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; color: var(--accent); text-shadow: var(--glow); }
+  .gstat-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 0.1em; margin-top: 2px; }
+  .lb-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(26,42,74,0.5); font-size: 0.7rem; }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-rank { font-family: 'Orbitron', sans-serif; font-size: 0.65rem; width: 18px; color: var(--dim); }
+  .lb-rank.gold { color: #ffd700; text-shadow: 0 0 8px #ffd700; }
+  .lb-rank.silver { color: #c0c0c0; }
+  .lb-rank.bronze { color: #cd7f32; }
+  .lb-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .lb-fitness { color: var(--accent3); font-weight: bold; width: 72px; text-align: right; }
+  .lb-gen { color: var(--dim); width: 44px; text-align: right; font-size: 0.65rem; }
+  .lb-date { color: var(--dim); font-size: 0.6rem; width: 64px; text-align: right; }
+  .lb-watch { background: none; border: 1px solid var(--border); color: var(--dim); cursor: pointer; font-size: 0.6rem; padding: 2px 6px; font-family: inherit; white-space: nowrap; transition: all 0.2s; }
+  .lb-watch:hover { border-color: var(--accent); color: var(--accent); }
+  .lb-empty { color: var(--dim); font-size: 0.7rem; padding: 14px 0; text-align: center; }
+  .name-row { display: flex; gap: 6px; margin-top: 6px; }
+  .name-row input { flex: 1; background: rgba(0,245,255,0.04); border: 1px solid var(--border); color: var(--text); font-family: 'Share Tech Mono', monospace; font-size: 0.7rem; padding: 6px 8px; outline: none; }
+  .name-row input:focus { border-color: var(--accent); }
+  .name-row input::placeholder { color: var(--dim); }
+  .io-row { display: flex; gap: 6px; margin-top: 6px; }
+  .io-row .btn { font-size: 0.55rem; padding: 7px 4px; }
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--panel); border: 1px solid var(--accent); color: var(--accent); font-family: 'Orbitron', sans-serif; font-size: 0.7rem; letter-spacing: 0.1em; padding: 10px 20px; transition: transform 0.3s; z-index: 999; pointer-events: none; white-space: nowrap; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.err { border-color: var(--accent2); color: var(--accent2); }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>TETRIS <span>AI</span></h1>
+  <p class="subtitle">NEURAL EVOLUTION TRAINER — GENETIC ALGORITHM · GLOBAL LEADERBOARD</p>
+
+  <div class="card" style="width:100%;max-width:660px;padding:14px 24px">
+    <div class="card-title">▸ GLOBAL NETWORK — ALL PLAYERS</div>
+    <div class="global-bar">
+      <div class="gstat"><div class="gstat-val" id="gGames">—</div><div class="gstat-label">TOTAL GAMES</div></div>
+      <div class="gstat"><div class="gstat-val" id="gGens">—</div><div class="gstat-label">GENERATIONS</div></div>
+      <div class="gstat"><div class="gstat-val" id="gBest">—</div><div class="gstat-label">GLOBAL BEST</div></div>
+      <div class="gstat"><div class="gstat-val" id="gPlayers">—</div><div class="gstat-label">CONTRIBUTORS</div></div>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <div class="side-panel">
+      <div class="card">
+        <div class="card-title">▸ GAME INFO</div>
+        <canvas id="nextPiece" width="80" height="80"></canvas>
+        <div style="height:8px"></div>
+        <div class="stat-row hl"><span>SCORE</span><span id="score">0</span></div>
+        <div class="stat-row"><span>LINES</span><span id="lines">0</span></div>
+        <div class="stat-row"><span>LEVEL</span><span id="level">1</span></div>
+        <div class="stat-row"><span>PIECES</span><span id="pieces">0</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ LOCAL EVOLUTION</div>
+        <div class="gen-display" id="genNum">GEN 0</div>
+        <div class="stat-row"><span>POPULATION</span><span id="popSize">—</span></div>
+        <div class="stat-row hl"><span>BEST FITNESS</span><span id="bestFit">0</span></div>
+        <div class="stat-row"><span>AVG FITNESS</span><span id="avgFit">0</span></div>
+        <div class="stat-row"><span>AGENT</span><span id="agentNum">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ BEST GENOME</div>
+        <div id="genomeViz"><div style="color:var(--dim);font-size:0.65rem">No data yet</div></div>
+        <div style="height:6px"></div>
+        <div style="font-size:0.58rem;color:var(--dim);line-height:1.9">H=height · L=lines<br>O=holes · B=bumps · W=wells</div>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ SUBMIT TO GLOBAL</div>
+        <div style="font-size:0.63rem;color:var(--dim);margin-bottom:8px">Share your best genome with everyone</div>
+        <div class="name-row">
+          <input type="text" id="playerName" placeholder="Your name / tag" maxlength="20">
+        </div>
+        <div style="height:6px"></div>
+        <button class="btn gold" onclick="submitToGlobal()">↑ SUBMIT GENOME</button>
+        <div class="io-row">
+          <button class="btn" onclick="exportGenome()">⬇ EXPORT</button>
+          <button class="btn" onclick="document.getElementById('importFile').click()">⬆ IMPORT</button>
+        </div>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importGenome(event)">
+      </div>
+    </div>
+
+    <div class="game-panel">
+      <canvas id="tetris" width="300" height="600"></canvas>
+    </div>
+
+    <div class="ai-panel">
+      <div class="card">
+        <div class="card-title">▸ MODE</div>
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="modeHuman" onclick="setMode('human')">HUMAN</button>
+          <button class="mode-btn" id="modeAI" onclick="setMode('ai')">TRAIN</button>
+          <button class="mode-btn" id="modeWatch" onclick="setMode('watch')">WATCH</button>
+        </div>
+        <div style="height:8px"></div>
+        <div class="ai-status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText" style="color:var(--dim)">IDLE</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ AI CONFIG</div>
+        <div class="slider-row">
+          <div>POPULATION <span class="slider-val" id="popVal">50</span></div>
+          <input type="range" id="popSlider" min="10" max="200" value="50" oninput="document.getElementById('popVal').textContent=this.value">
+        </div>
+        <div style="height:6px"></div>
+        <div class="slider-row">
+          <div>MUTATION <span class="slider-val" id="mutVal">0.30</span></div>
+          <input type="range" id="mutSlider" min="1" max="100" value="30" oninput="document.getElementById('mutVal').textContent=(this.value/100).toFixed(2)">
+        </div>
+        <div style="height:6px"></div>
+        <div class="slider-row">
+          <div>SPEED <span class="slider-val" id="speedVal">10x</span></div>
+          <input type="range" id="speedSlider" min="1" max="50" value="10" oninput="document.getElementById('speedVal').textContent=this.value+'x';setAISpeed(this.value)">
+        </div>
+        <div style="height:10px"></div>
+        <button class="btn success" id="startAIBtn" onclick="startAI()">▶ START TRAINING</button>
+        <div style="height:6px"></div>
+        <button class="btn danger" id="stopAIBtn" onclick="stopAI()" disabled>■ STOP</button>
+        <div style="height:6px"></div>
+        <button class="btn" onclick="resetAI()">↺ RESET LOCAL</button>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ FITNESS GRAPH</div>
+        <canvas id="fitnessGraph" width="176" height="100"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">▸ WEIGHT VIZ</div>
+        <canvas id="neuralViz" width="176" height="80"></canvas>
+        <div style="font-size:0.6rem;color:var(--dim);margin-top:4px">Current agent weights</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-row">
+    <div class="info-card" style="flex:2;min-width:300px">
+      <div class="card-title">
+        ▸ GLOBAL LEADERBOARD — TOP 20
+        <button onclick="loadLeaderboard()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:0.7rem;font-family:inherit;padding:0">↻ REFRESH</button>
+      </div>
+      <div id="leaderboardList"><div class="lb-empty">Loading...</div></div>
+    </div>
+    <div class="info-card" style="flex:1;min-width:200px">
+      <div class="card-title">▸ CONTROLS</div>
+      <div class="keys">
+        <span class="key">← →</span><span style="font-size:0.6rem;color:var(--dim)">Move</span>
+        <span class="key">↑</span><span style="font-size:0.6rem;color:var(--dim)">Rotate</span>
+        <span class="key">↓</span><span style="font-size:0.6rem;color:var(--dim)">Soft drop</span>
+        <span class="key">SPACE</span><span style="font-size:0.6rem;color:var(--dim)">Hard drop</span>
+        <span class="key">P</span><span style="font-size:0.6rem;color:var(--dim)">Pause</span>
+      </div>
+      <div style="height:10px"></div>
+      <div class="card-title">▸ HOW IT WORKS</div>
+      <p>Trains a <strong>Genetic Algorithm</strong> locally. Each agent scores board states by height, holes, lines & bumpiness. Fittest genomes reproduce with crossover + mutation. Submit your best to the <strong>shared global leaderboard</strong> — click WATCH on any entry to see it play.</p>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// JSONBIN CONFIG
+// ============================================================
+const BIN_ID  = '69a85d01ae596e708f5f0181';
+const API_KEY = '$2a$10$K6qQFEM3vLuUjYq9M8Zzher9N5G6BPA9tXkW49sP90nvbnhtAh6fi';
+const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const HEADERS = {
+  'Content-Type': 'application/json',
+  'X-Master-Key': API_KEY,
+  'X-Bin-Versioning': 'false'   // always overwrite, no version history clutter
+};
+
+// Rate-limit guard — JSONBin free tier is ~5 req/min writes
+let lastWrite = 0;
+const WRITE_COOLDOWN = 15000; // 15 seconds between writes
+
+async function readBin() {
+  const r = await fetch(BIN_URL + '/latest', { headers: { 'X-Master-Key': API_KEY } });
+  if (!r.ok) throw new Error('Read failed: ' + r.status);
+  const j = await r.json();
+  return j.record;
+}
+
+async function writeBin(data) {
+  const now = Date.now();
+  if (now - lastWrite < WRITE_COOLDOWN) {
+    throw new Error('Please wait a moment before submitting again');
+  }
+  const r = await fetch(BIN_URL, {
+    method: 'PUT',
+    headers: HEADERS,
+    body: JSON.stringify(data)
+  });
+  if (!r.ok) throw new Error('Write failed: ' + r.status);
+  lastWrite = Date.now();
+}
+
+// ============================================================
+// LEADERBOARD
+// ============================================================
+async function loadLeaderboard() {
+  try {
+    const data = await readBin();
+    renderLeaderboard(data.leaderboard || []);
+    renderGlobalStats(data.stats || {});
+  } catch(e) {
+    document.getElementById('leaderboardList').innerHTML =
+      '<div class="lb-empty" style="color:var(--accent2)">Could not load — check connection</div>';
+  }
+}
+
+async function submitToGlobal() {
+  if (!bestWeights) { toast('Train first — no genome to submit!', true); return; }
+  const vf = agentFitness.filter(f => f > 0);
+  const fitness = vf.length ? Math.max(...vf) : 0;
+  if (fitness <= 0) { toast('Finish at least one generation first!', true); return; }
+  const name = (document.getElementById('playerName').value.trim() || 'Anonymous').slice(0, 20);
+
+  toast('Submitting...');
+  try {
+    const data = await readBin();
+    let entries = data.leaderboard || [];
+    let stats   = data.stats || { totalGames:0, totalGens:0, bestFit:0, players:0 };
+
+    // Remove same name if new score is better
+    entries = entries.filter(e => !(e.name === name && e.fitness <= Math.round(fitness)));
+
+    entries.push({
+      name,
+      fitness:    Math.round(fitness),
+      weights:    bestWeights,
+      generation,
+      date:       new Date().toLocaleDateString('en-US', {month:'short', day:'numeric'}),
+      ts:         Date.now()
+    });
+    entries.sort((a, b) => b.fitness - a.fitness);
+    entries = entries.slice(0, 20);
+
+    stats.totalGames = (stats.totalGames || 0) + currentAgent + generation * (population.length || 1);
+    stats.totalGens  = (stats.totalGens  || 0) + generation;
+    stats.bestFit    = Math.max(stats.bestFit || 0, Math.round(fitness));
+    stats.players    = new Set(entries.map(e => e.name)).size;
+
+    await writeBin({ leaderboard: entries, stats });
+    renderLeaderboard(entries);
+    renderGlobalStats(stats);
+    toast('SUBMITTED! ' + name + ' → ' + Math.round(fitness).toLocaleString());
+  } catch(e) {
+    toast(e.message || 'Submit failed', true);
+  }
+}
+
+function renderLeaderboard(entries) {
+  const el = document.getElementById('leaderboardList');
+  if (!entries || !entries.length) {
+    el.innerHTML = '<div class="lb-empty">No entries yet — be the first to submit!</div>';
+    return;
+  }
+  const rc  = ['gold','silver','bronze'];
+  const sym = ['◆','◈','◇'];
+  el.innerHTML = entries.map((e, i) => {
+    const sw = JSON.stringify(e.weights);
+    const sn = String(e.name).replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="lb-row">
+      <div class="lb-rank ${rc[i]||''}">${i<3?sym[i]:i+1}</div>
+      <div class="lb-name">${sn}</div>
+      <div class="lb-fitness">${Number(e.fitness).toLocaleString()}</div>
+      <div class="lb-gen">G${e.generation}</div>
+      <div class="lb-date">${e.date||''}</div>
+      <button class="lb-watch" onclick='watchEntry(${sw},"${sn}")'>WATCH</button>
+    </div>`;
+  }).join('');
+}
+
+function renderGlobalStats(s) {
+  document.getElementById('gGames').textContent   = s.totalGames ? Number(s.totalGames).toLocaleString() : '0';
+  document.getElementById('gGens').textContent    = s.totalGens  ? Number(s.totalGens).toLocaleString()  : '0';
+  document.getElementById('gBest').textContent    = s.bestFit    ? Number(s.bestFit).toLocaleString()    : '0';
+  document.getElementById('gPlayers').textContent = s.players    || '0';
+}
+
+function watchEntry(weights, name) {
+  bestWeights = weights;
+  toast('Loaded: ' + name + ' — switching to WATCH');
+  setMode('watch');
+}
+
+function exportGenome() {
+  if (!bestWeights) { toast('No genome to export!', true); return; }
+  const data = { weights: bestWeights, fitness: Math.max(...agentFitness.filter(f=>f>0), 0), generation, fitnessHistory, exported: new Date().toISOString() };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)], {type:'application/json'}));
+  a.download = 'tetris-genome-gen' + generation + '.json';
+  a.click();
+  toast('GENOME EXPORTED');
+}
+
+function importGenome(ev) {
+  const file = ev.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!d.weights || d.weights.length !== 5) throw new Error('Invalid genome file');
+      bestWeights = d.weights;
+      if (d.fitnessHistory) fitnessHistory = d.fitnessHistory;
+      if (d.generation) generation = d.generation;
+      if (!population.length) initPopulation();
+      population[0] = [...bestWeights];
+      updateEvolutionStats(); drawFitnessGraph();
+      toast('IMPORTED — Gen ' + generation);
+    } catch(err) { toast('Import failed: ' + err.message, true); }
+  };
+  reader.readAsText(file);
+  ev.target.value = '';
+}
+
+function toast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show' + (err ? ' err' : '');
+  clearTimeout(t._t); t._t = setTimeout(() => t.className='', 3200);
+}
+
+// ============================================================
+// TETRIS CORE
+// ============================================================
+const COLS=10, ROWS=20, BLOCK=30;
+const canvas=document.getElementById('tetris'), ctx=canvas.getContext('2d');
+const ncanvas=document.getElementById('nextPiece'), nctx=ncanvas.getContext('2d');
+const PIECES=[
+  {shape:[[1,1,1,1]],color:'#00f5ff'},
+  {shape:[[1,1],[1,1]],color:'#ffe600'},
+  {shape:[[0,1,0],[1,1,1]],color:'#b400ff'},
+  {shape:[[0,1,1],[1,1,0]],color:'#00ff85'},
+  {shape:[[1,1,0],[0,1,1]],color:'#ff006e'},
+  {shape:[[1,0,0],[1,1,1]],color:'#ff8c00'},
+  {shape:[[0,0,1],[1,1,1]],color:'#005aff'},
+];
+let board,piece,nextPiece,score,lines,level,pieces,gameOver,paused;
+let dropInterval,lastTime=0,dropCounter=0,animFrame;
+function createBoard(){return Array.from({length:ROWS},()=>new Array(COLS).fill(0));}
+function randPiece(){const p=PIECES[Math.floor(Math.random()*PIECES.length)];return{shape:p.shape.map(r=>[...r]),color:p.color,x:Math.floor(COLS/2)-Math.floor(p.shape[0].length/2),y:0};}
+function resetGame(){board=createBoard();piece=randPiece();nextPiece=randPiece();score=0;lines=0;level=1;pieces=0;gameOver=false;paused=false;dropInterval=800;updateStats();}
+function rotate(s){return s[0].map((_,i)=>s.map(r=>r[i]).reverse());}
+function valid(sh,px,py){for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++){if(!sh[r][c])continue;const nx=px+c,ny=py+r;if(nx<0||nx>=COLS||ny>=ROWS)return false;if(ny>=0&&board[ny][nx])return false;}return true;}
+function lockPiece(){for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[r].length;c++){if(!piece.shape[r][c])continue;if(piece.y+r<0){gameOver=true;return;}board[piece.y+r][piece.x+c]=piece.color;}pieces++;clearLines();piece=nextPiece;nextPiece=randPiece();if(!valid(piece.shape,piece.x,piece.y))gameOver=true;}
+function clearLines(){let cl=0;for(let r=ROWS-1;r>=0;r--)if(board[r].every(c=>c!==0)){board.splice(r,1);board.unshift(new Array(COLS).fill(0));cl++;r++;}if(cl){lines+=cl;const pts=[0,100,300,500,800];score+=(pts[cl]||800)*level;level=Math.floor(lines/10)+1;dropInterval=Math.max(80,800-(level-1)*70);updateStats();}}
+function drawBl(c,x,y,sz,cx,ghost){cx.fillStyle=ghost?'rgba(255,255,255,0.07)':c;cx.fillRect(x*sz+1,y*sz+1,sz-2,sz-2);if(!ghost){cx.fillStyle='rgba(255,255,255,0.22)';cx.fillRect(x*sz+2,y*sz+2,sz-4,4);cx.fillStyle='rgba(0,0,0,0.28)';cx.fillRect(x*sz+2,y*sz+sz-6,sz-4,4);}}
+function drawBoard(){
+  ctx.fillStyle='#050810';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=1;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)ctx.strokeRect(c*BLOCK,r*BLOCK,BLOCK,BLOCK);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(board[r][c])drawBl(board[r][c],c,r,BLOCK,ctx);
+  if(!gameOver&&piece){
+    let gy=piece.y;while(valid(piece.shape,piece.x,gy+1))gy++;
+    for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[r].length;c++)if(piece.shape[r][c])drawBl(piece.color,piece.x+c,gy+r,BLOCK,ctx,true);
+    for(let r=0;r<piece.shape.length;r++)for(let c=0;c<piece.shape[r].length;c++)if(piece.shape[r][c])drawBl(piece.color,piece.x+c,piece.y+r,BLOCK,ctx);
+  }
+  if(gameOver){ctx.fillStyle='rgba(5,8,16,0.85)';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#ff006e';ctx.font='bold 28px Orbitron,monospace';ctx.textAlign='center';ctx.fillText('GAME OVER',canvas.width/2,canvas.height/2-20);ctx.fillStyle='#c8d8f0';ctx.font='14px Share Tech Mono,monospace';ctx.fillText('Score: '+score,canvas.width/2,canvas.height/2+15);if(currentMode==='human'){ctx.fillStyle='#00f5ff';ctx.font='11px Share Tech Mono,monospace';ctx.fillText('Press SPACE to restart',canvas.width/2,canvas.height/2+42);}ctx.textAlign='left';}
+}
+function drawNext(){nctx.fillStyle='#0a0f1e';nctx.fillRect(0,0,80,80);if(!nextPiece)return;const bs=16,ox=Math.floor((4-nextPiece.shape[0].length)/2),oy=Math.floor((4-nextPiece.shape.length)/2);for(let r=0;r<nextPiece.shape.length;r++)for(let c=0;c<nextPiece.shape[r].length;c++)if(nextPiece.shape[r][c])drawBl(nextPiece.color,ox+c,oy+r,bs,nctx);}
+function updateStats(){document.getElementById('score').textContent=score;document.getElementById('lines').textContent=lines;document.getElementById('level').textContent=level;document.getElementById('pieces').textContent=pieces;}
+
+// ============================================================
+// HUMAN LOOP
+// ============================================================
+let currentMode='human';
+function humanLoop(t=0){if(currentMode!=='human')return;const dt=t-lastTime;lastTime=t;if(!paused&&!gameOver){dropCounter+=dt;if(dropCounter>dropInterval){if(valid(piece.shape,piece.x,piece.y+1))piece.y++;else lockPiece();dropCounter=0;}}drawBoard();drawNext();animFrame=requestAnimationFrame(humanLoop);}
+document.addEventListener('keydown',e=>{
+  if(currentMode!=='human')return;
+  if(gameOver&&e.code==='Space'){resetGame();return;}
+  if(e.key==='p'||e.key==='P'){paused=!paused;return;}
+  if(paused||gameOver)return;
+  if(e.key==='ArrowLeft'){if(valid(piece.shape,piece.x-1,piece.y))piece.x--;}
+  else if(e.key==='ArrowRight'){if(valid(piece.shape,piece.x+1,piece.y))piece.x++;}
+  else if(e.key==='ArrowDown'){if(valid(piece.shape,piece.x,piece.y+1))piece.y++;else lockPiece();dropCounter=0;}
+  else if(e.key==='ArrowUp'){const rot=rotate(piece.shape);if(valid(rot,piece.x,piece.y))piece.shape=rot;else if(valid(rot,piece.x-1,piece.y)){piece.shape=rot;piece.x--;}else if(valid(rot,piece.x+1,piece.y)){piece.shape=rot;piece.x++;}}
+  else if(e.code==='Space'){e.preventDefault();while(valid(piece.shape,piece.x,piece.y+1))piece.y++;lockPiece();dropCounter=0;}
+  drawBoard();drawNext();
+});
+
+// ============================================================
+// AI HEURISTIC
+// ============================================================
+function copyBoard(b){return b.map(r=>[...r]);}
+function evalBoard(b,w){
+  const h=new Array(COLS).fill(0);
+  for(let c=0;c<COLS;c++)for(let r=0;r<ROWS;r++)if(b[r][c]){h[c]=ROWS-r;break;}
+  const agg=h.reduce((a,b)=>a+b,0);
+  let comp=0;for(let r=0;r<ROWS;r++)if(b[r].every(c=>c!==0))comp++;
+  let holes=0;for(let c=0;c<COLS;c++){let bl=false;for(let r=0;r<ROWS;r++){if(b[r][c])bl=true;else if(bl)holes++;}}
+  let bump=0;for(let c=0;c<COLS-1;c++)bump+=Math.abs(h[c]-h[c+1]);
+  let wells=0;for(let c=0;c<COLS;c++){const l=c>0?h[c-1]:99,rv=c<COLS-1?h[c+1]:99,wv=Math.min(l,rv)-h[c];if(wv>0)wells+=wv*(wv+1)/2;}
+  return w[0]*agg+w[1]*comp+w[2]*holes+w[3]*bump+w[4]*wells;
+}
+function getRots(shape){const rots=[shape];let cur=shape;for(let i=0;i<3;i++){cur=rotate(cur);if(!rots.some(r=>JSON.stringify(r)===JSON.stringify(cur)))rots.push(cur);}return rots;}
+function bestMove(b,p,w){
+  let best=null,bs=-Infinity;
+  const rots=getRots(p.shape);
+  for(let ri=0;ri<rots.length;ri++){
+    const sh=rots[ri];
+    for(let px=-1;px<COLS;px++){
+      if(!valid(sh,px,0)&&!valid(sh,px,-1)&&!valid(sh,px,-2))continue;
+      let py=p.y;while(valid(sh,px,py+1))py++;
+      if(!valid(sh,px,py))continue;
+      const nb=copyBoard(b);
+      for(let r=0;r<sh.length;r++)for(let c=0;c<sh[r].length;c++)if(sh[r][c]&&py+r>=0)nb[py+r][px+c]=p.color||'#fff';
+      const sb=copyBoard(nb);
+      for(let r=ROWS-1;r>=0;r--)if(sb[r].every(c=>c!==0)){sb.splice(r,1);sb.unshift(new Array(COLS).fill(0));r++;}
+      const sc=evalBoard(sb,w);
+      if(sc>bs){bs=sc;best={rotation:ri,x:px,y:py,shape:sh};}
+    }
+  }
+  return best;
+}
+
+// ============================================================
+// GENETIC ALGORITHM
+// ============================================================
+let population=[],generation=0,currentAgent=0,agentFitness=[],fitnessHistory=[],bestWeights=null;
+let aiRunning=false,aiIntervalId=null,aiSpeedMultiplier=10;
+function randGenome(){return[-(Math.random()*2),Math.random()*2,-(Math.random()*2),-(Math.random()*1),-(Math.random()*1)];}
+function initPopulation(){const sz=parseInt(document.getElementById('popSlider').value);population=Array.from({length:sz},randGenome);agentFitness=new Array(sz).fill(0);generation=0;currentAgent=0;fitnessHistory=[];updateEvolutionStats();}
+function nextGeneration(){
+  const best=Math.max(...agentFitness),avg=agentFitness.reduce((a,b)=>a+b,0)/agentFitness.length;
+  fitnessHistory.push({best,avg});if(fitnessHistory.length>100)fitnessHistory.shift();
+  bestWeights=[...population[agentFitness.indexOf(best)]];
+  const sorted=agentFitness.map((f,i)=>({f,i})).sort((a,b)=>b.f-a.f);
+  const topN=Math.max(2,Math.floor(population.length*0.2));
+  const parents=sorted.slice(0,topN).map(x=>population[x.i]);
+  const mutRate=parseFloat(document.getElementById('mutSlider').value)/100;
+  const newPop=[bestWeights];
+  while(newPop.length<population.length){const p1=parents[Math.floor(Math.random()*parents.length)],p2=parents[Math.floor(Math.random()*parents.length)];newPop.push(p1.map((g,i)=>Math.random()<0.5?g:p2[i]).map(g=>Math.random()<mutRate?g+(Math.random()-0.5)*0.5:g));}
+  population=newPop;agentFitness=new Array(population.length).fill(0);generation++;currentAgent=0;
+  drawFitnessGraph();updateEvolutionStats();
+}
+function updateEvolutionStats(){
+  document.getElementById('genNum').textContent='GEN '+generation;
+  document.getElementById('popSize').textContent=population.length||'—';
+  document.getElementById('agentNum').textContent=population.length?(currentAgent+'/'+population.length):'—';
+  const vf=agentFitness.filter(f=>f>0);
+  document.getElementById('bestFit').textContent=vf.length?Math.max(...vf).toFixed(0):'0';
+  document.getElementById('avgFit').textContent=vf.length?(vf.reduce((a,b)=>a+b,0)/vf.length).toFixed(0):'0';
+  drawGenomeViz();drawNeuralViz();
+}
+
+// ============================================================
+// AI GAME RUNNER
+// ============================================================
+let aiBoard,aiPiece,aiNext,aiScore,aiLines,aiPieces,aiQueue=[];
+function initAIGame(){aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiScore=0;aiLines=0;aiPieces=0;score=0;lines=0;level=1;pieces=0;board=aiBoard;piece=aiPiece;nextPiece=aiNext;aiQueue=[];computeMove();}
+function computeMove(){const w=population[currentAgent];if(!w)return;const bm=bestMove(aiBoard,aiPiece,w);if(!bm)return;aiQueue=[];for(let i=0;i<bm.rotation;i++)aiQueue.push('r');const dx=bm.x-aiPiece.x;for(let i=0;i<Math.abs(dx);i++)aiQueue.push(dx>0?'R':'L');aiQueue.push('D');}
+function aiStep(){
+  if(!aiRunning)return;
+  if(aiQueue.length>0){
+    const mv=aiQueue.shift();
+    if(mv==='r'){const rot=rotate(aiPiece.shape);if(valid(rot,aiPiece.x,aiPiece.y))aiPiece.shape=rot;}
+    else if(mv==='L'){if(valid(aiPiece.shape,aiPiece.x-1,aiPiece.y))aiPiece.x--;}
+    else if(mv==='R'){if(valid(aiPiece.shape,aiPiece.x+1,aiPiece.y))aiPiece.x++;}
+    else if(mv==='D'){
+      while(valid(aiPiece.shape,aiPiece.x,aiPiece.y+1))aiPiece.y++;
+      for(let r=0;r<aiPiece.shape.length;r++)for(let c=0;c<aiPiece.shape[r].length;c++){if(!aiPiece.shape[r][c])continue;if(aiPiece.y+r<0){endAIGame();return;}aiBoard[aiPiece.y+r][aiPiece.x+c]=aiPiece.color;}
+      let cl=0;for(let r=ROWS-1;r>=0;r--)if(aiBoard[r].every(c=>c!==0)){aiBoard.splice(r,1);aiBoard.unshift(new Array(COLS).fill(0));cl++;r++;}
+      aiLines+=cl;aiPieces++;const pts=[0,100,300,500,800];aiScore+=(pts[cl]||800)*Math.max(1,Math.floor(aiLines/10)+1);
+      level=Math.floor(aiLines/10)+1;score=aiScore;lines=aiLines;pieces=aiPieces;
+      if(aiPieces>=500){endAIGame();return;}
+      aiPiece=aiNext;aiNext=randPiece();board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+      if(!valid(aiPiece.shape,aiPiece.x,aiPiece.y)){endAIGame();return;}
+      computeMove();
+    }
+  }
+  board=aiBoard;piece=aiPiece;nextPiece=aiNext;drawBoard();drawNext();
+  document.getElementById('statusDot').className='status-dot thinking';
+}
+function endAIGame(){agentFitness[currentAgent]=aiLines*100+aiPieces*0.5+aiScore*0.01;currentAgent++;if(currentAgent>=population.length)nextGeneration();else updateEvolutionStats();initAIGame();}
+
+// ============================================================
+// AI CONTROL
+// ============================================================
+function startAI(){if(!population.length)initPopulation();aiRunning=true;currentMode='ai';cancelAnimationFrame(animFrame);initAIGame();aiIntervalId=setInterval(aiStep,Math.max(5,Math.round(100/aiSpeedMultiplier)));document.getElementById('startAIBtn').disabled=true;document.getElementById('stopAIBtn').disabled=false;document.getElementById('statusDot').className='status-dot on';document.getElementById('statusText').textContent='TRAINING...';updateEvolutionStats();}
+function stopAI(){aiRunning=false;clearInterval(aiIntervalId);document.getElementById('startAIBtn').disabled=false;document.getElementById('stopAIBtn').disabled=true;document.getElementById('statusDot').className='status-dot';document.getElementById('statusText').textContent='PAUSED';}
+function resetAI(){stopAI();population=[];agentFitness=[];fitnessHistory=[];generation=0;currentAgent=0;bestWeights=null;updateEvolutionStats();drawFitnessGraph();drawNeuralViz();['genNum','bestFit','avgFit'].forEach(id=>document.getElementById(id).textContent=id==='genNum'?'GEN 0':'0');document.getElementById('popSize').textContent='—';document.getElementById('agentNum').textContent='—';document.getElementById('statusText').textContent='IDLE';document.getElementById('genomeViz').innerHTML='<div style="color:var(--dim);font-size:0.65rem">No data yet</div>';}
+function setAISpeed(v){aiSpeedMultiplier=parseInt(v);if(aiRunning){clearInterval(aiIntervalId);aiIntervalId=setInterval(aiStep,Math.max(5,Math.round(100/aiSpeedMultiplier)));}}
+
+// ============================================================
+// WATCH MODE
+// ============================================================
+let watchId=null;
+function startWatch(){
+  if(!bestWeights){toast('Train first — no best genome yet!',true);['modeHuman','modeAI','modeWatch'].forEach(id=>document.getElementById(id).classList.remove('active'));document.getElementById('modeHuman').classList.add('active');currentMode='human';return;}
+  clearInterval(watchId);clearInterval(aiIntervalId);aiRunning=false;currentMode='watch';cancelAnimationFrame(animFrame);
+  aiBoard=createBoard();aiPiece=randPiece();aiNext=randPiece();aiPieces=0;aiLines=0;aiScore=0;score=0;lines=0;level=1;pieces=0;
+  board=aiBoard;piece=aiPiece;nextPiece=aiNext;updateStats();
+  if(!population.length)population=[bestWeights];else population[0]=bestWeights;
+  currentAgent=0;aiQueue=[];computeMove();
+  document.getElementById('statusDot').className='status-dot on';document.getElementById('statusText').textContent='WATCHING BEST';
+  watchId=setInterval(()=>{if(currentMode!=='watch')return;aiStep();},80);
+}
+
+// ============================================================
+// MODE SWITCH
+// ============================================================
+function setMode(mode){
+  ['modeHuman','modeAI','modeWatch'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('mode'+mode[0].toUpperCase()+mode.slice(1)).classList.add('active');
+  if(mode==='human'){stopAI();clearInterval(watchId);currentMode='human';resetGame();lastTime=0;dropCounter=0;document.getElementById('statusDot').className='status-dot';document.getElementById('statusText').textContent='HUMAN';cancelAnimationFrame(animFrame);animFrame=requestAnimationFrame(humanLoop);}
+  else if(mode==='ai'){clearInterval(watchId);currentMode='ai';if(!aiRunning){document.getElementById('statusDot').className='status-dot';document.getElementById('statusText').textContent='READY';}}
+  else if(mode==='watch')startWatch();
+}
+
+// ============================================================
+// VISUALIZATIONS
+// ============================================================
+function drawFitnessGraph(){
+  const gc=document.getElementById('fitnessGraph'),g=gc.getContext('2d'),W=gc.width,H=gc.height;
+  g.fillStyle='#050810';g.fillRect(0,0,W,H);
+  if(fitnessHistory.length<2){g.fillStyle='rgba(0,245,255,0.2)';g.font='10px Share Tech Mono';g.textAlign='center';g.fillText('NO DATA YET',W/2,H/2);g.textAlign='left';return;}
+  const maxF=Math.max(...fitnessHistory.map(h=>h.best));if(!maxF)return;
+  const dx=W/(fitnessHistory.length-1);
+  g.beginPath();g.strokeStyle='rgba(0,245,255,0.4)';g.lineWidth=1;fitnessHistory.forEach((h,i)=>{const x=i*dx,y=H-(h.avg/maxF)*(H-4)-2;i===0?g.moveTo(x,y):g.lineTo(x,y);});g.stroke();
+  g.beginPath();g.strokeStyle='#aaff00';g.lineWidth=2;fitnessHistory.forEach((h,i)=>{const x=i*dx,y=H-(h.best/maxF)*(H-4)-2;i===0?g.moveTo(x,y):g.lineTo(x,y);});g.stroke();
+  g.fillStyle='#aaff00';g.font='9px Share Tech Mono';g.fillText('BEST',2,10);g.fillStyle='rgba(0,245,255,0.6)';g.fillText('AVG',28,10);
+}
+function drawNeuralViz(){
+  const nc=document.getElementById('neuralViz'),n=nc.getContext('2d'),W=nc.width,H=nc.height;
+  n.fillStyle='#050810';n.fillRect(0,0,W,H);
+  const w=(currentMode==='watch'&&bestWeights)?bestWeights:(population[currentAgent]||null);if(!w)return;
+  const labels=['H','L','O','B','W'],bw=W/w.length-4;
+  w.forEach((wv,i)=>{const x=i*(W/w.length)+2,norm=Math.min(1,Math.abs(wv)/2),bh=norm*(H-20),color=wv>=0?'#00ff85':'#ff006e';n.fillStyle=color;n.fillRect(x,H-14-bh,bw,bh);n.fillStyle='rgba(255,255,255,0.5)';n.font='8px Share Tech Mono';n.textAlign='center';n.fillText(labels[i],x+bw/2,H-4);n.textAlign='left';});
+}
+function drawGenomeViz(){
+  const el=document.getElementById('genomeViz'),w=bestWeights||(population[0]||null);
+  if(!w){el.innerHTML='<div style="color:var(--dim);font-size:0.65rem">No data yet</div>';return;}
+  const labels=['HEIGHT','LINES','HOLES','BUMPS','WELLS'],colors=['#ff006e','#aaff00','#ff8c00','#00f5ff','#b400ff'];
+  el.innerHTML=w.map((wv,i)=>{const pct=Math.min(100,Math.abs(wv)*50),dir=wv>=0?'↑':'↓';return`<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><span style="font-size:0.6rem;color:var(--dim);width:38px">${labels[i]}</span><div style="flex:1;height:4px;background:rgba(255,255,255,0.05)"><div style="width:${pct}%;height:100%;background:${colors[i]};box-shadow:0 0 6px ${colors[i]}"></div></div><span style="font-size:0.6rem;color:${colors[i]};width:14px">${dir}</span></div>`;}).join('');
+}
+setInterval(()=>{if(aiRunning||currentMode==='watch'){drawNeuralViz();if(Math.random()<0.1)drawGenomeViz();}},500);
+
+// ============================================================
+// INIT
+// ============================================================
+resetGame();
+animFrame=requestAnimationFrame(humanLoop);
+drawFitnessGraph();drawNeuralViz();drawGenomeViz();
+loadLeaderboard();
+setInterval(loadLeaderboard, 60000);
+</script>
+</body>
+</html>
